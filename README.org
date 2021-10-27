@@ -1,0 +1,140 @@
+* ZK hack week 1 problem notes
+#+begin_src rust
+    let msg = r#"
+    ______ _   __  _   _            _
+    |___  /| | / / | | | |          | |
+       / / | |/ /  | |_| | __ _  ___| | __
+      / /  |    \  |  _  |/ _` |/ __| |/ /
+    ./ /___| |\  \ | | | | (_| | (__|   <
+    \_____/\_| \_/ \_| |_/\__,_|\___|_|\_\
+    "#;
+#+end_src
+
+Hello and welcome to my problem journal. The knowledge I'm operating on is a bachelor's in Applied Mathematics with one course in cryptography, about two years working experience with Rust, and most importantly, significant enthusiasm. Note that this write-up is currently incomplete, as I have not yet solved the problem.
+
+I'm writing this problem journal in attempt to:
+1. Debug my intuition about cryptography, and thought processes to try when I get stuck
+2. Share with others, so that we can learn together
+3. Document my process so that I can go back, review what I didn't know or understand, and improve.
+Cryptography can be pretty dense, so I'm hoping that writing this problem journal will help me avoid getting stuck on particular details, or generally feel overwhelmed. Go team.
+
+Starting in =lib.rs=, I look at this [[https://github.com/kobigurk/zkhack-bls-pedersen][cryptographic problem]] and think, I recognize some of these words. Verify. hash, but not hash_to_curve. product_of_pairings, I think I remember what an eliptic curve pairing vaguely is, but I woudln't be able to explain it. I don't recognize =G1Affine= or =G2Affine=, but I would guess it means something about an affine group. [[https://en.wikipedia.org/wiki/Affine_group][Wikipedia]] affords me this unintelligible answer.
+#+begin_quote
+In mathematics, the affine group or general affine group of any affine space over a field K is the group of *all invertible affine transformations from the space into itself*.
+
+It is a Lie group if K is the real or complex field or quaternions.
+#+end_quote
+
+what?...kay, what about [[https://en.wikipedia.org/wiki/Affine_space][affine space]].
+#+begin_quote
+An affine space is a geometric structure that generalizes some of the properties of Euclidean spaces in such a way that these are *independent of the concepts of distance and measure of angles*, keeping only the properties *related to parallelism and ratio of lengths for parallel line segments*.
+#+end_quote
+Still wat? The picture makes things somewhat clearer, but only barely. How does this relate to our Affine group, and in what way is the group Affine? Still don't know.
+
+But I might interpret that we have two projections of some "affine" space of our eliptic curve--=BLS12381=--and somehow taking the =ChaCha20rng= seed of all ones (this seems sketchy), and the =CRH= over something called the =G1Projective= and the =ZKHackPedersenWindow=. Don't recognize most of these terms, defering a call to my process heap to look these up.
+
+But first, it seems safe to assume that *whatever is breakable is in the repo*, and not broken in Arkworks, or any of the dependencies. That seed of all ones looked sus. We want to compute a signature such that the product of these pairings is one:
+#+begin_src rust
+(sig /*manipulate this*/, -prime_subgroup_generator), (hash_to_curve(msg) /* manipulate this */, pk)
+#+end_src
+It also looks sus that we're handed a function =puzzle_data= that generates =pk=, =ms=, and =sigs=. That seems like a plausible attack surface.
+
+Okay, so =puzzle_data= returns ==(private_key, messages, signatures)==. Also, the =private_key= is right there in plaintext. That seems...too easy, the problem description says I only get to see the 256 signatures (I guess I also get the messages attached to these signatures), but the using secret key is cheating.
+
+Notable here though, I see a type, =Cursor,= that I don't recognize, that might be worth looking up. The docs say:
+#+begin_src rust
+  // usage:
+  let pk = G2Affine::deserialize(&mut Cursor::new(pk_bytes)).unwrap();
+  // From docs:
+  /// A `Cursor` wraps an in-memory buffer and provides it with a
+  /// [`Seek`] implementation.
+  ///
+  /// `Cursor`s are used with in-memory buffers, anything implementing
+  /// [`AsRef`]`<[u8]>`, to allow them to implement [`Read`] and/or [`Write`],
+  /// allowing these buffers to be used anywhere you might use a reader or writer
+  /// that does actual I/O.
+  ///
+  /// The standard library implements some I/O traits on various types which
+  /// are commonly used as a buffer, like `Cursor<`[`Vec`]`<u8>>` and
+  /// `Cursor<`[`&[u8]`][bytes]`>`.
+#+end_src
+So I suppose there's a reason I would want to be careful about where my private key gets stored, and ==Cursor=='s are a way to store the key in RAM which probably gets wiped after dropping the buffer, or something like that. We also use =Cursor='s  on the signatures, but not on the messages. Wonder why. It doesn't seem like signature strings should be sensitive.
+
+But looking at puzzle data does give a hint how to pass type-checks. This now passes type checks, and we're on the road to figuring out what to shove into =sig=.
+#+begin_src rust
+  fn main() {
+      welcome();
+      puzzle(PUZZLE_DESCRIPTION);
+      let (pk, ms, sigs) = puzzle_data();
+      for (m, sig) in ms.iter().zip(sigs.iter()) {
+          verify(pk, m, *sig);
+      }
+      // new:
+      use ark_bls12_381::G1Affine;
+      use ark_serialize::CanonicalDeserialize;
+      use std::io::Cursor;
+      let sig = "abcd"; // figure out what to put here
+      let sig = G1Affine::deserialize(&mut Cursor::new(hex::decode(sig).unwrap())).unwrap();
+      let m = "thor314";
+      let ms = hex::decode(m).unwrap();// note-to-self that we use hex::decode, not `as_bytes`.
+      verify(pk, &ms, sig);
+  }
+#+end_src
+One more question: We're now using =hex::decode= to encode our strings. I wonder what the difference between using that and just calling =as_bytes= is. But we're at least passing type checks now.
+
+
+To recap, so far, we've:
+- Looked at =lib.rs=, =main.rs=, and =bls.rs=, and looked into some of the terms but not all
+- Set up type checks in =main=, borrowing the the approach from =data.rs=
+- Identified that we need to use some of the messages and signatures (but not the plaintext private key) from =data.rs= to generate a new message and signature
+- looked at =hash.rs=, and wondered if seeding =rng_pedersen= with all ones was sketchy
+
+What next? Options are to look up the terms, try random stuff in the signature box
+
+I guess we could actually, you know, run the code. Who knows, maybe Kobi is a troll king, all the apparent cryptography is just window dressing, and it'll turn out that I just need to plug some random value in and I'll be good to go.
+
+It looks like verifying all the given signatures actually takes kindof a long time, about half a second for each sig, or about 128 seconds total. Might turn that off.
+
+We have arrived. Our first runtime error.
+#+begin_src
+thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: IoError(Error { kind: UnexpectedEof, message: "failed to fill whole buffer" })', src/bin/verify-bls-pedersen.rs:22:82
+#+end_src
+Yay, we panicked! So my username message is going to need to be longer.
+#+begin_src rust
+  let m = "f2faa8b1bb0f06c6142e788ad836d1f7d1abf95458a08a55593c594056ac224d";
+#+end_src
+And now, a new error!
+#+begin_src
+thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: IoError(Error { kind: UnexpectedEof, message: "failed to fill whole buffer" })', src/bin/verify-bls-pedersen.rs:21:82
+#+end_src
+Which means the signature probably needs to be longer too.
+#+begin_src rust
+      let sig = "067ffcb122c43181eb4c525d2a7b56714262aae808ae24b62aa5ec6e1035a9f6ce6473f19dc470957afa98b437c68814";
+#+end_src
+And we are rewarded with our prize! No, not a solution, but an incrementally different error. Thanks be to the error oracle.
+#+begin_src
+thread 'main' panicked at 'assertion failed: Bls12_381::product_of_pairings(&[(sig.into(),\n                                  G2Affine::prime_subgroup_generator().neg().into()),\n                                 (h.into(), pk.into())]).is_one()', src/bls.rs:10:5
+#+end_src
+Who knows, cryptography could have just been broken, allowing a win for dumb trying. Onto the next thing.
+
+So back to actually trying to solve the problem.
+
+Uh. Right, so here's the part where we're kinda stuck, the real problem-solving part. The things I know I don't know are:
+- A bunch of the terms and types from up above: =affine=, =BLS12381=, =ChaCha20rng=, =CRHScheme=, =G1Projective=, =ZKHackPedersenWindow=, =G1Affine=, =rng_pedersen=, =pedersenWindow=, =blake2s_simd=, =blake2s=
+- How to generate a new signature from a given string, though it's suggested this may be possible (without exploiting that plaintext private_key)
+
+I'll start with the second, looking at other parts of the program.
+
+In =verify=, =hash_to_curve(msg)= outputs the hash, along with the private key is one pairing. I don't get to use the private key, boohoo.
+
+The other pairing is generated by the signature (which I don't know how to generate), and the negative of a "a fixed generator of unknown exponent". Sounds a bit dark-magicky.
+
+From that, it doesn't seem like there's a reason to look closely at the =hash_to_curve= method I was looking at earlier, and also where a lot of the words I don't understand are. I don't think I can exploit anything there, since I can call the =hash_to_curve= on any given message and get a hash, but I won't have the private key part of the pairing to check signatures against.
+
+I guess I might be even more backwards than I think. Given the hash AND the private key, I think the next step would be to find a way to compute the inverse, such that the =product_of_pairings= of =((h,pk),(sig,-generator))= is one, which would give me the signature, and some unimportant generator.
+
+Okay, so now we're sortof stuck. We've identified what we would do if we had the private key, and have a notion of a way to work from the private key to deriving the signature. But we still don't have any thoughts about how to exploit the set of leaked messages and signatures.
+
+Well, we have a bunch of example elements from: =((h,pk),(sig,-generator))=. Specifically, we have 256 examples of =h(msg_i),sig_i,=. Can we derive the private key from our sample somehow? That sounds like something a cryptographer might say. Why did I get 256 samples, and not just one? That suggests there might be collision attack or something. That seems... probably hard, given that the private key is 192*16=3072 bytes.
+
+Well then, I've been at it for about two hours. I think I publish here and see what other people have been up to.
