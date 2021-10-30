@@ -18,6 +18,9 @@ I'm writing this problem journal in attempt to:
 3. Document my process so that I can go back, review what I didn't know or understand, and improve.
 Cryptography can be pretty dense, so I'm hoping that writing this problem journal will help me avoid getting stuck on particular details, or generally feel overwhelmed. Go team.
 
+My post-note on this journal is that the meat of the solution doesn't really start until the section titled [[*Figuring out where I'm stuck][Figuring out where I'm stuck]].
+
+** Stumbling around cryptography
 Starting in =lib.rs=, I look at this [[https://github.com/kobigurk/zkhack-bls-pedersen][cryptographic problem]] and think, I recognize some of these words. Verify. hash, but not hash_to_curve. product_of_pairings, I think I remember what an eliptic curve pairing vaguely is, but I woudln't be able to explain it. I don't recognize =G1Affine= or =G2Affine=, but I would guess it means something about an affine group. [[https://en.wikipedia.org/wiki/Affine_group][Wikipedia]] affords me this unintelligible answer.
 #+begin_quote
 In mathematics, the affine group or general affine group of any affine space over a field K is the group of *all invertible affine transformations from the space into itself*.
@@ -37,6 +40,7 @@ But first, it seems safe to assume that *whatever is breakable is in the repo*, 
 #+begin_src rust
 (sig /*manipulate this*/, -prime_subgroup_generator), (hash_to_curve(msg) /* manipulate this */, pk)
 #+end_src
+
 It also looks sus that we're handed a function =puzzle_data= that generates =pk=, =ms=, and =sigs=. That seems like a plausible attack surface.
 
 Okay, so =puzzle_data= returns =(public_key, messages, signatures)=. I get 256 signatures. I guess I also get the messages attached to these signatures.
@@ -133,7 +137,7 @@ In any case, I'm going to have to go figure out how elliptic curve pairings work
 ** BLS signatures and bilinear pairings
 It turns out signatures are actually pretty straight-forward to construct. The math behind elliptic curves and their pairings in *e n t r e n c h e d* (whisperings of sextic twists brush softly over my lowly mathematical sophistication), but the actual algorithm to sign is really easy, grounded in the bilinear property of pairings, which just means, given bilinear pairing function =e(a, b)=, the following is true:
 
-#+begin_export latex
+#+begin_export src
 e(a^x,b)=e(a,b)^x=e(a,b^x)
 #+end_export
 
@@ -141,11 +145,13 @@ In this case =x= is our secret key, =a= is the hash of our message (=a=h(m)=), =
 
 So given messages =m_1= and =m_2=, we'd love it if something like the following were true, which would allow us to create a new message-sig pair:
 
-#+begin_export latex
+#+begin_export src
 h(f(m_1,m_2))^x = g(s_1,s_2)
 #+end_export
 
-where =f,g= are functions we know how to compute.
+where =f,g= are functions we know how to compute. That way *we don't have to determine the secret key*. So now our task is to dive into the implementation deets of the [[https://developer.aleo.org/developer/toy_examples/pedersen_hash/][Pedersen hash]], and look for those functions.
+
+** Pedersen Hash
 
 ** Attack the private key with linear algebra
 First we need to figure out the alg used to generate all these signatures; I think we're in BLS signature land.
