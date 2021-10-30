@@ -7,14 +7,6 @@ use ark_ff::One;
 
 pub fn verify(pk: G2Affine, msg: &[u8], sig: G1Affine) {
     let (_, h) = hash_to_curve(msg);
-    let _ = Bls12_381::product_of_pairings(&[
-        (
-            sig.into(),
-            G2Affine::prime_subgroup_generator().neg().into(),
-        ),
-        (h.into(), pk.into()),
-    ]);
-
     assert!(Bls12_381::product_of_pairings(&[
         (
             sig.into(),

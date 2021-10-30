@@ -18,8 +18,8 @@ fn main() {
     use ark_serialize::CanonicalDeserialize;
     use std::io::Cursor;
     // copied from puzzle data
-    let (m, sig) = bls_pedersen::soln::solve();
+    let (msg, sig) = bls_pedersen::soln::solve();
     let sig = G1Affine::deserialize(&mut Cursor::new(hex::decode(sig).unwrap())).unwrap();
-    let ms = hex::decode(m).unwrap();
-    verify(pk, &ms, sig);
+    let msg = hex::decode(msg).unwrap();
+    verify(pk, &msg, sig);
 }

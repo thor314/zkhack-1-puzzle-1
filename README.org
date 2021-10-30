@@ -124,7 +124,28 @@ So back to actually trying to solve the problem.
 ** Figuring out where I'm stuck
 Uh. Right, so here's the part where we're kinda stuck, the real problem-solving part. The things I know I don't know are:
 - A bunch of the terms and types from up above: =affine=, =BLS12381=, =ChaCha20rng=, =CRHScheme=, =G1Projective=, =ZKHackPedersenWindow=, =G1Affine=, =rng_pedersen=, =pedersenWindow=, =blake2s_simd=, =blake2s=
-- How to generate a new signature from a given string: I think I would need the private key to do this, so I suspect that somehow I should be able to take the 256 data points and attack the private key. That sounds linear algebra-y.
+- How to generate a new signature from a given string: I think I would need the private key to do this, so I suspect that somehow I should be able to take the 256 data points and attack the private key, or else, generate a new message-signature pair from some combination of other messages. That sounds linear algebra-y.
+
+In any case, I'm going to have to go figure out how elliptic curve pairings work, and how this whole signature game is played.
+
+/only several hours of reading later/
+
+** BLS signatures and bilinear pairings
+It turns out signatures are actually pretty straight-forward to construct. The math behind elliptic curves and their pairings in *e n t r e n c h e d* (whisperings of sextic twists brush softly over my lowly mathematical sophistication), but the actual algorithm to sign is really easy, grounded in the bilinear property of pairings, which just means, given bilinear pairing function =e(a, b)=, the following is true:
+
+#+begin_export latex
+e(a^x,b)=e(a,b)^x=e(a,b^x)
+#+end_export
+
+In this case =x= is our secret key, =a= is the hash of our message (=a=h(m)=), =a^x= is our signature, =b= is our group generator, and =b^x= is our public key.
+
+So given messages =m_1= and =m_2=, we'd love it if something like the following were true, which would allow us to create a new message-sig pair:
+
+#+begin_export latex
+h(f(m_1,m_2))^x = g(s_1,s_2)
+#+end_export
+
+where =f,g= are functions we know how to compute.
 
 ** Attack the private key with linear algebra
 First we need to figure out the alg used to generate all these signatures; I think we're in BLS signature land.
