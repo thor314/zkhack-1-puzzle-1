@@ -168,20 +168,13 @@ Defined in [[https://developer.aleo.org/developer/toy_examples/pedersen_hash/][t
     }
 #+end_src
 
-We want to find some linear combination of messages =m_1+...+m_k=m_n=. Let the parameter array of 256 elements be denoted =p_i=. After trying a couple combinations, the following stands out: We can produce a new signature as a product of two other signatures,
+We want to find some combination of messages =m_1+...+m_k=m_n=, or signatures =s_1+...+s_k=s_n=. Let the parameter array of 256 elements be denoted =p_i=. After trying a couple things on paper, the following stands out: We can produce a new signature as a product of two other signatures,
 
 =s_1*s_2=(sum m_1i*p_i)^x*(sum m_2i*p_i)^x=
+
 = =[(sum m_1i*p_i)*(sum m_2i*p_i)]^x=
 
-In which we have reduced the problem to finding the pre-image of =[(sum m_1i*p_i)*(sum m_2i*p_i)=, by exploiting the Pedersen hash.
-
-
-
-Given some set of parameters, =p=(2,4,8,16)=, messages =m_1=(0,1,0,1)=, and =m_2=(1,0,1,0)=, we would have digests =d_1=4+16=, =d_2=2+8=. Thus, the digest for =m_1+m_2=(1,1,1,1)= would be =d_1,2=2+4+8+16=. Finally, we could take =d_1,2= to
-
-But if instead =m_1= and =m_2= share some bit in common, say =m_1=(1,1,1,1)=, then the digest
-
-
+In which we have reduced the problem to finding the pre-image of =(sum m_1i*p_i)*(sum m_2i*p_i)=, by exploiting the Pedersen hash.
 
 We have our parameters:
 
