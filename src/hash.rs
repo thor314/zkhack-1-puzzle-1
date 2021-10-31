@@ -7,7 +7,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
 #[derive(Clone)]
-struct ZkHackPedersenWindow {}
+pub struct ZkHackPedersenWindow {}
 
 impl Window for ZkHackPedersenWindow {
     const WINDOW_SIZE: usize = 1;

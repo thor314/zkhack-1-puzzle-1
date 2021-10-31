@@ -131,24 +131,66 @@ Uh. Right, so here's the part where we're kinda stuck, the real problem-solving 
 
 In any case, I'm going to have to go figure out how elliptic curve pairings work, and how this whole signature game is played.
 
-/only several hours of reading later/
+/a mere several days of reading and generally twiddling about later/
 
 ** BLS signatures and bilinear pairings
-It turns out signatures are actually pretty straight-forward to construct. The math behind elliptic curves and their pairings in *e n t r e n c h e d* (whisperings of sextic twists brush softly over my lowly mathematical sophistication), but the actual algorithm to sign is really easy, grounded in the bilinear property of pairings, which just means, given bilinear pairing function =e(a, b)=, the following is true:
+It turns out signatures are actually pretty straight-forward to construct. The math behind elliptic curves pairings and optimizations is *e n t r e n c h e d* (whisperings of sextic twists brush softly over the meager remants of my mathematical sophistication), but the actual algorithm to sign is really easy, grounded in the bilinear property of pairings, which just means, given bilinear pairing function =e(a, b)=, the following is true (gosh darn no [[https://github.com/leegao/readme2tex][easy]] latex support in README):
 
 =e(a^x,b)=e(a,b)^x=e(a,b^x)=
 
 In this case =x= is our secret key, =a= is the hash of our message (=a=h(m)=), =a^x= is our signature, =b= is our group generator, and =b^x= is our public key.
 
-So given messages =m_1= and =m_2=, we'd love it if something like the following were true, which would allow us to create a new message-sig pair:
-
+So given messages =m_1= and =m_2=, signatures =s_1=, =s_2= (or possibly some larger set of messages and messages), we'd love it if something like the following were true, which would allow us to create a new message-signature pair:
 
 =h(f(m_1,m_2))^x = g(s_1,s_2)=
 
-where =f,g= are functions we know how to compute. That way *we don't have to determine the secret key*. So now our task is to dive into the implementation deets of the [[https://developer.aleo.org/developer/toy_examples/pedersen_hash/][Pedersen hash]], and look for those functions.
+where =f,g= are functions we want to know how to compute. That way *we don't have to determine the secret key*. So now our task is to dive into the implementation deets of the [[https://developer.aleo.org/developer/toy_examples/pedersen_hash/][Pedersen hash]], and look for those functions.
 
 ** Pedersen Hash
+Defined in [[https://developer.aleo.org/developer/toy_examples/pedersen_hash/][the Aleo pedersen hash example]], the pedersen hash is pretty straightforward (the =ark-crypto-primitives= implementation is a bit more complex but looks similar):
+#+begin_src rust
+  circuit PedersenHash {
+    parameters: [group; 256],
+
+    // Instantiates a Pedersen hash circuit
+    function new(parameters: [group; 256]) -> Self {
+        return Self { parameters: parameters };
+    }
+
+    function hash(self, bits: [bool; 256]) -> group {
+        let digest: group = 0group;
+        for i in 0..256 {
+            if bits[i] {
+                digest += self.parameters[i];
+            }
+        }
+        return digest;
+    }
+#+end_src
+
+We want to find some linear combination of messages =m_1+...+m_k=m_n=. Let the parameter array of 256 elements be denoted =p_i=. After trying a couple combinations, the following stands out: We can produce a new signature as a product of two other signatures,
+
+=s_1*s_2=(sum m_1i*p_i)^x*(sum m_2i*p_i)^x=
+= =[(sum m_1i*p_i)*(sum m_2i*p_i)]^x=
+
+In which we have reduced the problem to finding the pre-image of =[(sum m_1i*p_i)*(sum m_2i*p_i)=, by exploiting the Pedersen hash.
 
 
-** Attack the private key with linear algebra
-First we need to figure out the alg used to generate all these signatures; I think we're in BLS signature land.
+
+Given some set of parameters, =p=(2,4,8,16)=, messages =m_1=(0,1,0,1)=, and =m_2=(1,0,1,0)=, we would have digests =d_1=4+16=, =d_2=2+8=. Thus, the digest for =m_1+m_2=(1,1,1,1)= would be =d_1,2=2+4+8+16=. Finally, we could take =d_1,2= to
+
+But if instead =m_1= and =m_2= share some bit in common, say =m_1=(1,1,1,1)=, then the digest
+
+
+
+We have our parameters:
+
+#+begin_src rust
+  let rng_pedersen = &mut ChaCha20Rng::from_seed([
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1,
+    ]);
+  let parameters = CRH::<G1Projective, ZkHackPedersenWindow>::setup(rng_pedersen).unwrap();
+#+end_src
+
+So
